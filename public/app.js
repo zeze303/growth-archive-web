@@ -626,17 +626,49 @@ function renderRecordForm() {
 }
 
 
+function auditActionLabel(action) {
+  const map = {
+    create: "新增",
+    update: "修改",
+    delete: "删除",
+    export: "导出",
+    login: "登录",
+    logout: "退出"
+  };
+  return map[action] || action || "-";
+}
+
+function auditTargetLabel(targetType) {
+  const map = {
+    student: "学生档案",
+    students: "学生档案汇总",
+    record: "成长记录",
+    records: "成长记录汇总",
+    "student-records": "单个学生记录",
+    "student-pdf": "学生 PDF",
+    session: "登录会话"
+  };
+  return map[targetType] || targetType || "-";
+}
+
+function formatAuditDetail(detail = "") {
+  const text = String(detail || "").trim();
+  if (!text) return `<span class="audit-empty">-</span>`;
+  return text.split("；").map((item) => `<div class="audit-detail-line">${item}</div>`).join("");
+}
+
 function renderAuditView() {
   return `
-    <section class="card archive-panel">
-      <div class="toolbar">
+    <section class="card archive-panel audit-panel">
+      <div class="toolbar audit-toolbar">
         <div><h3 class="section-title">操作日志 / 审计日志</h3><div class="note">用于追踪后台登录、建档、修改、删除、导出等关键管理动作。</div></div>
-        <div class="actions-inline"><button class="btn secondary" id="refreshAuditBtn">刷新日志</button></div>
+        <div class="actions-inline"><span class="badge primary">共 ${state.auditLogs.length} 条</span><button class="btn secondary" id="refreshAuditBtn">刷新日志</button></div>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>时间</th><th>操作人</th><th>角色</th><th>动作</th><th>对象</th><th>详情</th></tr></thead><tbody>${state.auditLogs.length ? state.auditLogs.map((log) => `<tr><td>${formatDate(log.time)}</td><td>${log.actorName || "-"}</td><td>${log.actorRole || "-"}</td><td>${log.action || "-"}</td><td>${log.targetType || "-"}</td><td>${log.detail || "-"}</td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">暂无审计日志</div></td></tr>`}</tbody></table></div>
+      <div class="table-wrap audit-table-wrap"><table class="audit-table"><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr></thead><tbody>${state.auditLogs.length ? state.auditLogs.map((log) => `<tr><td class="audit-time-cell">${formatDate(log.time)}</td><td class="audit-actor-cell"><strong>${log.actorName || "-"}</strong><span class="audit-subline">${log.actorRole || "-"}</span></td><td class="audit-action-cell"><span class="badge ${log.action === "delete" ? "danger" : log.action === "update" ? "warning" : log.action === "export" ? "primary" : log.action === "login" || log.action === "logout" ? "success" : "primary"}">${auditActionLabel(log.action)}</span></td><td class="audit-target-cell"><div>${auditTargetLabel(log.targetType)}</div><span class="audit-subline">ID：${log.targetId || "-"}</span></td><td class="audit-detail-cell"><div class="audit-detail-box">${formatAuditDetail(log.detail)}</div></td></tr>`).join("") : `<tr><td colspan="5"><div class="empty">暂无审计日志</div></td></tr>`}</tbody></table></div>
     </section>
   `;
 }
+
 
 
 function bindDashboardEvents() {

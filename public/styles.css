@@ -501,7 +501,90 @@ button {
 .badge.primary { background: rgba(61, 106, 232, 0.14); color: var(--primary); }
 .badge.danger { background: rgba(223, 77, 77, 0.12); color: var(--danger); }
 
+.audit-panel {
+  overflow: hidden;
+}
+
+.audit-toolbar {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.audit-table th:nth-child(1),
+.audit-table td:nth-child(1) {
+  width: 148px;
+}
+
+.audit-table th:nth-child(2),
+.audit-table td:nth-child(2) {
+  width: 120px;
+}
+
+.audit-table th:nth-child(3),
+.audit-table td:nth-child(3) {
+  width: 92px;
+}
+
+.audit-table th:nth-child(4),
+.audit-table td:nth-child(4) {
+  width: 130px;
+}
+
+.audit-time-cell {
+  white-space: normal;
+  line-height: 1.6;
+  color: var(--subtext);
+}
+
+.audit-actor-cell strong,
+.audit-target-cell div {
+  display: block;
+  color: var(--text);
+}
+
+.audit-subline {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--subtext);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.audit-action-cell .badge {
+  min-width: 54px;
+  justify-content: center;
+}
+
+.audit-detail-cell {
+  min-width: 0;
+}
+
+.audit-detail-box {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f8faff;
+  border: 1px solid #e8eef8;
+}
+
+.audit-detail-line {
+  line-height: 1.7;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.audit-detail-line + .audit-detail-line {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #e3eaf5;
+}
+
+.audit-empty {
+  color: var(--subtext);
+}
+
 .hero-panel {
+
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
   gap: 20px;
@@ -573,10 +656,20 @@ button {
   overflow: auto;
 }
 
+.audit-table-wrap {
+  overflow-x: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
 }
+
+.audit-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
 
 thead th {
   text-align: left;

@@ -179,6 +179,124 @@ function buildStudentView(student, role = "public") {
   };
 }
 
+function stringifyAuditValue(value) {
+  if (value === null || value === undefined) return "未填写";
+  const text = String(value).trim();
+  return text ? text : "未填写";
+}
+
+function buildStudentUpdateDetail(before, after) {
+  const fields = [
+    { label: "姓名", before: before.name, after: after.name },
+    { label: "性别", before: before.gender, after: after.gender },
+    { label: "年龄", before: before.age, after: after.age },
+    { label: "学校", before: before.school, after: after.school },
+    { label: "年级班级", before: before.grade_class || before.gradeClass, after: after.grade_class || after.gradeClass },
+    { label: "监护人", before: before.guardian, after: after.guardian },
+    { label: "联系电话", before: before.phone, after: after.phone },
+    { label: "家庭住址", before: before.address, after: after.address },
+    { label: "公开备注", before: before.public_note || before.publicNote, after: after.public_note || after.publicNote },
+    { label: "内部备注", before: before.note, after: after.note }
+  ];
+
+  const changes = fields
+    .map((field) => {
+      const beforeText = stringifyAuditValue(field.before);
+      const afterText = stringifyAuditValue(field.after);
+      if (beforeText === afterText) return null;
+      return `${field.label}：${beforeText} → ${afterText}`;
+    })
+    .filter(Boolean);
+
+  if (!changes.length) return `修改学生档案：${after.name || before.name}`;
+  return `修改学生档案：${after.name || before.name}；${changes.join("；")}`;
+}
+
+function buildRecordUpdateDetail(before, after, studentName = "") {
+  const fields = [
+    { label: "所属学生", before: studentName || "未关联学生", after: studentName || "未关联学生" },
+    { label: "记录周期", before: before.period, after: after.period },
+    { label: "美育评分", before: before.aesthetic, after: after.aesthetic },
+    { label: "财商评分", before: before.finance, after: after.finance },
+    { label: "心理评分", before: before.psychology, after: after.psychology },
+    { label: "行为评分", before: before.behavior, after: after.behavior },
+    { label: "总分", before: before.total_score || before.totalScore, after: after.total_score || after.totalScore },
+    { label: "等级", before: before.level, after: after.level },
+    { label: "美育评语", before: before.comment_aesthetic || before.comments?.aesthetic, after: after.comment_aesthetic || after.comments?.aesthetic },
+    { label: "财商评语", before: before.comment_finance || before.comments?.finance, after: after.comment_finance || after.comments?.finance },
+    { label: "心理评语", before: before.comment_psychology || before.comments?.psychology, after: after.comment_psychology || after.comments?.psychology },
+    { label: "行为评语", before: before.comment_behavior || before.comments?.behavior, after: after.comment_behavior || after.comments?.behavior },
+    { label: "综合评语", before: before.comment_overall || before.comments?.overall, after: after.comment_overall || after.comments?.overall }
+  ];
+
+  const changes = fields
+    .map((field) => {
+      const beforeText = stringifyAuditValue(field.before);
+      const afterText = stringifyAuditValue(field.after);
+      if (beforeText === afterText) return null;
+      return `${field.label}：${beforeText} → ${afterText}`;
+    })
+    .filter(Boolean);
+
+  const title = studentName ? `修改成长记录：${studentName} / ${after.period || before.period}` : `修改成长记录：${after.period || before.period}`;
+  if (!changes.length) return title;
+  return `${title}；${changes.join("；")}`;
+}
+
+function buildStudentCreateDetail(student) {
+  const fields = [
+    { label: "姓名", value: student.name },
+    { label: "性别", value: student.gender },
+    { label: "年龄", value: student.age },
+    { label: "学校", value: student.school },
+    { label: "年级班级", value: student.grade_class || student.gradeClass },
+    { label: "监护人", value: student.guardian },
+    { label: "联系电话", value: student.phone },
+    { label: "家庭住址", value: student.address },
+    { label: "公开备注", value: student.public_note || student.publicNote },
+    { label: "内部备注", value: student.note }
+  ];
+  return `创建学生档案：${student.name}；${fields.map((field) => `${field.label}：${stringifyAuditValue(field.value)}`).join("；")}`;
+}
+
+function buildStudentDeleteDetail(student, removedRecordCount = 0) {
+  return `删除学生档案：${student.name}；姓名：${stringifyAuditValue(student.name)}；性别：${stringifyAuditValue(student.gender)}；联系电话：${stringifyAuditValue(student.phone)}；学校：${stringifyAuditValue(student.school)}；年级班级：${stringifyAuditValue(student.grade_class || student.gradeClass)}；联动删除成长记录：${removedRecordCount} 条`;
+}
+
+function buildRecordCreateDetail(record, studentName = "") {
+  const fields = [
+    { label: "所属学生", value: studentName || "未关联学生" },
+    { label: "记录周期", value: record.period },
+    { label: "美育评分", value: record.aesthetic },
+    { label: "财商评分", value: record.finance },
+    { label: "心理评分", value: record.psychology },
+    { label: "行为评分", value: record.behavior },
+    { label: "总分", value: record.total_score || record.totalScore },
+    { label: "等级", value: record.level },
+    { label: "美育评语", value: record.comment_aesthetic || record.comments?.aesthetic },
+    { label: "财商评语", value: record.comment_finance || record.comments?.finance },
+    { label: "心理评语", value: record.comment_psychology || record.comments?.psychology },
+    { label: "行为评语", value: record.comment_behavior || record.comments?.behavior },
+    { label: "综合评语", value: record.comment_overall || record.comments?.overall }
+  ];
+  const title = studentName ? `新增成长记录：${studentName} / ${record.period}` : `新增成长记录：${record.period}`;
+  return `${title}；${fields.map((field) => `${field.label}：${stringifyAuditValue(field.value)}`).join("；")}`;
+}
+
+function buildRecordDeleteDetail(record, studentName = "") {
+  const fields = [
+    { label: "所属学生", value: studentName || "未关联学生" },
+    { label: "记录周期", value: record.period },
+    { label: "总分", value: record.total_score || record.totalScore },
+    { label: "等级", value: record.level }
+  ];
+  const title = studentName ? `删除成长记录：${studentName} / ${record.period}` : `删除成长记录：${record.period}`;
+  return `${title}；${fields.map((field) => `${field.label}：${stringifyAuditValue(field.value)}`).join("；")}`;
+}
+
+
+
+
 function buildWarningInfo(record, averageScore = 0) {
   const warnings = [];
   if (!record) return warnings;
@@ -748,7 +866,8 @@ app.post("/api/students", authRequired, async (req, res) => {
       updated_at: new Date().toISOString(),
       updated_by: req.currentUser.id
     });
-    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "create", targetType: "student", targetId: student.id, detail: `创建学生档案：${student.name}` });
+    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "create", targetType: "student", targetId: student.id, detail: buildStudentCreateDetail(student) });
+
     res.status(201).json({ student: buildStudentView(student, req.currentUser.role) });
   } catch (error) {
     res.status(500).json({ message: error.message || "创建学生失败" });
@@ -773,7 +892,8 @@ app.put("/api/students/:id", authRequired, async (req, res) => {
       updated_at: new Date().toISOString(),
       updated_by: req.currentUser.id
     });
-    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "update", targetType: "student", targetId: updated.id, detail: `修改学生档案：${student.name}` });
+    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "update", targetType: "student", targetId: updated.id, detail: buildStudentUpdateDetail(student, updated) });
+
     res.json({ student: buildStudentView(updated, req.currentUser.role) });
   } catch (error) {
     res.status(500).json({ message: error.message || "更新学生失败" });
@@ -784,7 +904,8 @@ app.delete("/api/students/:id", authRequired, async (req, res) => {
   try {
     const result = await deleteStudent(req.params.id);
     if (!result.student) return res.status(404).json({ message: "学生不存在" });
-    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "delete", targetType: "student", targetId: result.student.id, detail: `删除学生档案：${result.student.name}，并联动删除 ${result.removedRecordCount} 条成长记录` });
+    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "delete", targetType: "student", targetId: result.student.id, detail: buildStudentDeleteDetail(result.student, result.removedRecordCount) });
+
     res.json({ success: true, removedRecordCount: result.removedRecordCount });
   } catch (error) {
     res.status(500).json({ message: error.message || "删除学生失败" });
@@ -983,7 +1104,8 @@ app.post("/api/records", authRequired, async (req, res) => {
       created_by: req.currentUser.id,
       updated_by: req.currentUser.id
     });
-    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "create", targetType: "record", targetId: record.id, detail: `新增成长记录：${student.name} / ${record.period}` });
+    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "create", targetType: "record", targetId: record.id, detail: buildRecordCreateDetail(record, student.name) });
+
     res.status(201).json({ record: mapRecordToClient(record) });
   } catch (error) {
     res.status(500).json({ message: error.message || "创建成长记录失败" });
@@ -994,17 +1116,19 @@ app.put("/api/records/:id", authRequired, async (req, res) => {
   try {
     const before = await findRecordById(req.params.id);
     if (!before) return res.status(404).json({ message: "成长记录不存在" });
+    const student = await findStudentById(before.student_id || before.studentId);
     const payload = computeRecordPayload(req.body, before);
     const record = await updateRecord(req.params.id, {
       ...payload,
       updated_by: req.currentUser.id
     });
-    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "update", targetType: "record", targetId: before.id, detail: `修改成长记录：${before.period}` });
+    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "update", targetType: "record", targetId: before.id, detail: buildRecordUpdateDetail(before, record, student?.name || "") });
     res.json({ record: mapRecordToClient(record) });
   } catch (error) {
     res.status(500).json({ message: error.message || "更新成长记录失败" });
   }
 });
+
 
 app.get("/api/records/:id", authRequired, async (req, res) => {
   try {
@@ -1020,12 +1144,14 @@ app.delete("/api/records/:id", authRequired, async (req, res) => {
   try {
     const record = await deleteRecord(req.params.id);
     if (!record) return res.status(404).json({ message: "成长记录不存在" });
-    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "delete", targetType: "record", targetId: record.id, detail: `删除成长记录：${record.period}` });
+    const student = await findStudentById(record.student_id || record.studentId);
+    await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "delete", targetType: "record", targetId: record.id, detail: buildRecordDeleteDetail(record, student?.name || "") });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ message: error.message || "删除成长记录失败" });
   }
 });
+
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
