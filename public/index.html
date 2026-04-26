@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>心迹成诗 - 成长档案采集后台</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script>
+    window.addEventListener("error", function (event) {
+      const root = document.getElementById("app");
+      if (!root) return;
+      root.innerHTML = '<div style="padding:32px;font-family:Microsoft YaHei,sans-serif;color:#24324a;line-height:1.8"><h2 style="margin:0 0 12px">页面加载异常</h2><div>错误信息：' + (event.message || '未知错误') + '</div><div style="margin-top:8px">建议：按 Ctrl + F5 强制刷新，若仍异常请把这段错误截图发我。</div></div>';
+    });
+  </script>
+  <script src="/app.js"></script>
+
+
+</body>
+</html>
