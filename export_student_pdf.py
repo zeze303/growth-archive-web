@@ -27,6 +27,8 @@ styles.add(ParagraphStyle(name='CNTitle', parent=styles['Title'], fontName='STSo
 styles.add(ParagraphStyle(name='CNHeading', parent=styles['Heading2'], fontName='STSong-Light', fontSize=13, leading=18, textColor=colors.HexColor('#1f3f75')))
 styles.add(ParagraphStyle(name='CNBody', parent=styles['BodyText'], fontName='STSong-Light', fontSize=10.5, leading=16, textColor=colors.HexColor('#24324a')))
 styles.add(ParagraphStyle(name='CNMeta', parent=styles['BodyText'], fontName='STSong-Light', fontSize=9.5, leading=14, textColor=colors.HexColor('#5d6a82')))
+styles.add(ParagraphStyle(name='CNTable', parent=styles['BodyText'], fontName='STSong-Light', fontSize=8.6, leading=11, textColor=colors.HexColor('#24324a'), wordWrap='CJK'))
+
 
 def esc(text):
     return str(text or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -48,26 +50,31 @@ story.append(Paragraph('二、成长记录概览', styles['CNHeading']))
 rows = [['周期', '美育', '财商', '心理', '行为', '总分', '等级', '预警标签']]
 for record in records:
     rows.append([
-        record.get('period', ''),
-        str(record.get('scores', {}).get('aesthetic', '')),
-        str(record.get('scores', {}).get('finance', '')),
-        str(record.get('scores', {}).get('psychology', '')),
-        str(record.get('scores', {}).get('behavior', '')),
-        str(record.get('totalScore', '')),
-        record.get('level', ''),
-        '；'.join(record.get('warningTags', [])) or '无'
+        Paragraph(esc(record.get('period', '')), styles['CNTable']),
+        Paragraph(str(record.get('scores', {}).get('aesthetic', '')), styles['CNTable']),
+        Paragraph(str(record.get('scores', {}).get('finance', '')), styles['CNTable']),
+        Paragraph(str(record.get('scores', {}).get('psychology', '')), styles['CNTable']),
+        Paragraph(str(record.get('scores', {}).get('behavior', '')), styles['CNTable']),
+        Paragraph(str(record.get('totalScore', '')), styles['CNTable']),
+        Paragraph(esc(record.get('level', '')), styles['CNTable']),
+        Paragraph(esc('；'.join(record.get('warningTags', [])) or '无'), styles['CNTable'])
     ])
 
-table = Table(rows, repeatRows=1, colWidths=[3.1*cm, 1.3*cm, 1.3*cm, 1.3*cm, 1.3*cm, 1.5*cm, 1.8*cm, 4.6*cm])
+table = Table(rows, repeatRows=1, colWidths=[2.8*cm, 1.1*cm, 1.1*cm, 1.1*cm, 1.1*cm, 1.2*cm, 1.4*cm, 6.2*cm])
 table.setStyle(TableStyle([
-    ('FONTNAME', (0, 0), (-1, -1), 'STSong-Light'),
-    ('FONTSIZE', (0, 0), (-1, -1), 8.8),
+    ('FONTNAME', (0, 0), (-1, 0), 'STSong-Light'),
+    ('FONTSIZE', (0, 0), (-1, 0), 8.8),
     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#dce8ff')),
     ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1f3f75')),
     ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#cfd9ea')),
-    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')])
+    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+    ('LEFTPADDING', (0, 0), (-1, -1), 5),
+    ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+    ('TOPPADDING', (0, 1), (-1, -1), 6),
+    ('BOTTOMPADDING', (0, 1), (-1, -1), 6)
 ]))
+
 story.append(table)
 story.append(Spacer(1, 0.45 * cm))
 story.append(Paragraph('三、趋势摘要', styles['CNHeading']))
