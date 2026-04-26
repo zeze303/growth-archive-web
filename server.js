@@ -9,6 +9,8 @@ const os = require("os");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DIMENSIONS = ["aesthetic", "finance", "psychology", "behavior"];
+const DATA_DIR = path.join(__dirname, "data");
+const DATA_FILE = path.join(DATA_DIR, "db.json");
 
 const TABLES = {
   users: "growth_admin_users",
@@ -21,7 +23,9 @@ const TABLES = {
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const hasSupabase = Boolean(supabaseUrl && supabaseKey);
-const supabase = hasSupabase ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } }) : null;
+const supabase = hasSupabase
+  ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+  : null;
 
 function getDefaultAdmins() {
   const rawAccounts = process.env.ADMIN_ACCOUNTS;
@@ -29,13 +33,15 @@ function getDefaultAdmins() {
     try {
       const parsed = JSON.parse(rawAccounts);
       if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map((item, index) => ({
-          id: item.id || `admin-${index + 1}`,
-          username: item.username,
-          password: item.password,
-          role: "admin",
-          name: item.name || `管理员${index + 1}`
-        })).filter((item) => item.username && item.password);
+        return parsed
+          .map((item, index) => ({
+            id: item.id || `admin-${index + 1}`,
+            username: item.username,
+            password: item.password,
+            role: "admin",
+            name: item.name || `管理员${index + 1}`
+          }))
+          .filter((item) => item.username && item.password);
       }
     } catch (error) {
       console.error("ADMIN_ACCOUNTS 解析失败，将回退到单管理员配置");
@@ -50,14 +56,34 @@ function getDefaultAdmins() {
   }];
 }
 
-function buildLocalFallbackDb() {
-  return {
-    users: getDefaultAdmins(),
-    sessions: [],
-    auditLogs: [],
-    students: [],
-    records: []
-  };
+const defaultDb = {
+  users: getDefaultAdmins(),
+  sessions: [],
+  auditLogs: [],
+  students: [],
+  records: []
+};
+
+function ensureDb() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(DATA_FILE)) {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(defaultDb, null, 2), "utf-8");
+  }
+}
+
+function readDb() {
+  ensureDb();
+  return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+}
+
+function writeDb(db) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf-8");
+}
+
+function sortStudentsByName(students = []) {
+  return [...students].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "zh-Hans-CN"));
 }
 
 function generateId(prefix) {
@@ -71,6 +97,12 @@ function safeUser(user) {
     role: user.role,
     name: user.name
   };
+}
+
+function getToken(req) {
+  const auth = req.headers.authorization || "";
+  if (!auth.startsWith("Bearer ")) return null;
+  return auth.slice(7);
 }
 
 function maskPhone(phone = "") {
@@ -126,14 +158,7 @@ function computeRecordPayload(body, existing = {}) {
   };
 }
 
-function getToken(req) {
-  const auth = req.headers.authorization || "";
-  if (!auth.startsWith("Bearer ")) return null;
-  return auth.slice(7);
-}
-
 function buildStudentView(student, role = "public") {
-
   const isAdmin = role === "admin";
   return {
     id: student.id,
@@ -142,7 +167,7 @@ function buildStudentView(student, role = "public") {
     age: student.age || 0,
     school: student.school || "",
     gradeClass: student.grade_class || student.gradeClass || "",
-    guardian: isAdmin ? (student.guardian || "") : (student.guardian || ""),
+    guardian: student.guardian || "",
     phone: isAdmin ? (student.phone || "") : maskPhone(student.phone || ""),
     address: isAdmin ? (student.address || "") : maskAddress(student.address || ""),
     publicNote: student.public_note || student.publicNote || "",
@@ -199,15 +224,23 @@ async function ensureSupabaseSeed() {
   if (!hasSupabase) return;
   const admins = getDefaultAdmins();
   for (const admin of admins) {
-    const { data } = await supabase.from(TABLES.users).select("id").eq("username", admin.username).maybeSingle();
+    const { data, error } = await supabase.from(TABLES.users).select("id").eq("username", admin.username).maybeSingle();
+    if (error) throw error;
     if (!data) {
-      await supabase.from(TABLES.users).insert(admin);
+      const { error: insertError } = await supabase.from(TABLES.users).insert({
+        id: admin.id,
+        username: admin.username,
+        password: admin.password,
+        role: admin.role,
+        name: admin.name
+      });
+      if (insertError) throw insertError;
     }
   }
 }
 
 async function listUsers() {
-  if (!hasSupabase) return buildLocalFallbackDb().users;
+  if (!hasSupabase) return readDb().users;
   const { data, error } = await supabase.from(TABLES.users).select("*").order("created_at", { ascending: true });
   if (error) throw error;
   return data || [];
@@ -215,7 +248,7 @@ async function listUsers() {
 
 async function findUserByUsernamePassword(username, password) {
   if (!hasSupabase) {
-    return buildLocalFallbackDb().users.find((item) => item.username === username && item.password === password) || null;
+    return readDb().users.find((item) => item.username === username && item.password === password) || null;
   }
   const { data, error } = await supabase.from(TABLES.users).select("*").eq("username", username).eq("password", password).maybeSingle();
   if (error) throw error;
@@ -223,33 +256,57 @@ async function findUserByUsernamePassword(username, password) {
 }
 
 async function insertSession(session) {
-  if (!hasSupabase) return session;
+  if (!hasSupabase) {
+    const db = readDb();
+    db.sessions = db.sessions.filter((item) => item.userId !== session.user_id && item.user_id !== session.user_id);
+    db.sessions.push(session);
+    writeDb(db);
+    return session;
+  }
   const { error } = await supabase.from(TABLES.sessions).upsert(session);
   if (error) throw error;
   return session;
 }
 
 async function removeSessionByUserId(userId) {
-  if (!hasSupabase) return;
+  if (!hasSupabase) {
+    const db = readDb();
+    db.sessions = db.sessions.filter((item) => item.userId !== userId && item.user_id !== userId);
+    writeDb(db);
+    return;
+  }
   const { error } = await supabase.from(TABLES.sessions).delete().eq("user_id", userId);
   if (error) throw error;
 }
 
 async function removeSessionByToken(token) {
-  if (!hasSupabase) return;
+  if (!hasSupabase) {
+    const db = readDb();
+    db.sessions = db.sessions.filter((item) => item.token !== token);
+    writeDb(db);
+    return;
+  }
   const { error } = await supabase.from(TABLES.sessions).delete().eq("token", token);
   if (error) throw error;
 }
 
 async function findSessionByToken(token) {
-  if (!hasSupabase) return null;
+  if (!hasSupabase) {
+    return readDb().sessions.find((item) => item.token === token) || null;
+  }
   const { data, error } = await supabase.from(TABLES.sessions).select("*").eq("token", token).maybeSingle();
   if (error) throw error;
   return data || null;
 }
 
 async function insertAuditLog(payload) {
-  if (!hasSupabase) return;
+  if (!hasSupabase) {
+    const db = readDb();
+    db.auditLogs.unshift({ id: generateId("log"), time: new Date().toISOString(), ...payload });
+    db.auditLogs = db.auditLogs.slice(0, 3000);
+    writeDb(db);
+    return;
+  }
   const log = {
     id: generateId("log"),
     time: new Date().toISOString(),
@@ -265,9 +322,16 @@ async function insertAuditLog(payload) {
   if (error) throw error;
 }
 
-
 async function listAuditLogs() {
-  if (!hasSupabase) return [];
+  if (!hasSupabase) {
+    return (readDb().auditLogs || []).map((item) => ({
+      ...item,
+      actorName: item.actorName || item.actor_name,
+      actorRole: item.actorRole || item.actor_role,
+      targetType: item.targetType || item.target_type,
+      targetId: item.targetId || item.target_id
+    }));
+  }
   const { data, error } = await supabase.from(TABLES.logs).select("*").order("time", { ascending: false }).limit(3000);
   if (error) throw error;
   return (data || []).map((item) => ({
@@ -279,37 +343,72 @@ async function listAuditLogs() {
   }));
 }
 
-
 async function listStudents() {
-  if (!hasSupabase) return [];
+  if (!hasSupabase) return readDb().students;
   const { data, error } = await supabase.from(TABLES.students).select("*").order("name", { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
 async function findStudentById(id) {
-  if (!hasSupabase) return null;
+  if (!hasSupabase) return readDb().students.find((item) => item.id === id) || null;
   const { data, error } = await supabase.from(TABLES.students).select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return data || null;
 }
 
 async function insertStudent(student) {
-  if (!hasSupabase) return student;
+  if (!hasSupabase) {
+    const db = readDb();
+    db.students.push(student);
+    writeDb(db);
+    return student;
+  }
   const { data, error } = await supabase.from(TABLES.students).insert(student).select().single();
   if (error) throw error;
   return data;
 }
 
 async function updateStudent(id, payload) {
-  if (!hasSupabase) return null;
+  if (!hasSupabase) {
+    const db = readDb();
+    const index = db.students.findIndex((item) => item.id === id);
+    if (index === -1) return null;
+    db.students[index] = {
+      ...db.students[index],
+      name: payload.name,
+      gender: payload.gender,
+      age: payload.age,
+      school: payload.school,
+      gradeClass: payload.grade_class,
+      guardian: payload.guardian,
+      phone: payload.phone,
+      address: payload.address,
+      note: payload.note,
+      publicNote: payload.public_note,
+      updatedAt: payload.updated_at,
+      updatedBy: payload.updated_by
+    };
+    writeDb(db);
+    return db.students[index];
+  }
   const { data, error } = await supabase.from(TABLES.students).update(payload).eq("id", id).select().single();
   if (error) throw error;
   return data;
 }
 
 async function deleteStudent(id) {
-  if (!hasSupabase) return { removedRecordCount: 0 };
+  if (!hasSupabase) {
+    const db = readDb();
+    const index = db.students.findIndex((item) => item.id === id);
+    if (index === -1) return { student: null, removedRecordCount: 0 };
+    const student = db.students[index];
+    const removedRecords = db.records.filter((item) => item.studentId === student.id);
+    db.students.splice(index, 1);
+    db.records = db.records.filter((item) => item.studentId !== student.id);
+    writeDb(db);
+    return { student, removedRecordCount: removedRecords.length };
+  }
   const student = await findStudentById(id);
   const records = await listRecordsByStudentId(id);
   const { error } = await supabase.from(TABLES.students).delete().eq("id", id);
@@ -318,42 +417,106 @@ async function deleteStudent(id) {
 }
 
 async function listRecords() {
-  if (!hasSupabase) return [];
+  if (!hasSupabase) return readDb().records;
   const { data, error } = await supabase.from(TABLES.records).select("*").order("created_at", { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
 async function listRecordsByStudentId(studentId) {
-  if (!hasSupabase) return [];
+  if (!hasSupabase) return readDb().records.filter((item) => item.studentId === studentId);
   const { data, error } = await supabase.from(TABLES.records).select("*").eq("student_id", studentId).order("created_at", { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
 async function findRecordById(id) {
-  if (!hasSupabase) return null;
+  if (!hasSupabase) return readDb().records.find((item) => item.id === id) || null;
   const { data, error } = await supabase.from(TABLES.records).select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return data || null;
 }
 
 async function insertRecord(record) {
-  if (!hasSupabase) return record;
+  if (!hasSupabase) {
+    const db = readDb();
+    db.records.push({
+      id: record.id,
+      studentId: record.student_id,
+      period: record.period,
+      scores: {
+        aesthetic: record.aesthetic,
+        finance: record.finance,
+        psychology: record.psychology,
+        behavior: record.behavior
+      },
+      comments: {
+        aesthetic: record.comment_aesthetic,
+        finance: record.comment_finance,
+        psychology: record.comment_psychology,
+        behavior: record.comment_behavior,
+        overall: record.comment_overall
+      },
+      totalScore: record.total_score,
+      level: record.level,
+      createdAt: record.created_at,
+      createdBy: record.created_by,
+      updatedAt: record.updated_at,
+      updatedBy: record.updated_by
+    });
+    writeDb(db);
+    return db.records[db.records.length - 1];
+  }
   const { data, error } = await supabase.from(TABLES.records).insert(record).select().single();
   if (error) throw error;
   return data;
 }
 
 async function updateRecord(id, payload) {
-  if (!hasSupabase) return null;
+  if (!hasSupabase) {
+    const db = readDb();
+    const index = db.records.findIndex((item) => item.id === id);
+    if (index === -1) return null;
+    db.records[index] = {
+      ...db.records[index],
+      studentId: payload.student_id,
+      period: payload.period,
+      scores: {
+        aesthetic: payload.aesthetic,
+        finance: payload.finance,
+        psychology: payload.psychology,
+        behavior: payload.behavior
+      },
+      comments: {
+        aesthetic: payload.comment_aesthetic,
+        finance: payload.comment_finance,
+        psychology: payload.comment_psychology,
+        behavior: payload.comment_behavior,
+        overall: payload.comment_overall
+      },
+      totalScore: payload.total_score,
+      level: payload.level,
+      updatedAt: payload.updated_at,
+      updatedBy: payload.updated_by
+    };
+    writeDb(db);
+    return db.records[index];
+  }
   const { data, error } = await supabase.from(TABLES.records).update(payload).eq("id", id).select().single();
   if (error) throw error;
   return data;
 }
 
 async function deleteRecord(id) {
-  if (!hasSupabase) return null;
+  if (!hasSupabase) {
+    const db = readDb();
+    const index = db.records.findIndex((item) => item.id === id);
+    if (index === -1) return null;
+    const record = db.records[index];
+    db.records.splice(index, 1);
+    writeDb(db);
+    return record;
+  }
   const record = await findRecordById(id);
   const { error } = await supabase.from(TABLES.records).delete().eq("id", id);
   if (error) throw error;
@@ -361,6 +524,17 @@ async function deleteRecord(id) {
 }
 
 function mapRecordToClient(record, averageScore = 0) {
+  if (!record) return null;
+  if (record.scores) {
+    return {
+      ...record,
+      warningTags: buildWarningInfo(record, averageScore),
+      createdAt: record.createdAt || record.created_at,
+      createdBy: record.createdBy || record.created_by,
+      updatedAt: record.updatedAt || record.updated_at,
+      updatedBy: record.updatedBy || record.updated_by
+    };
+  }
   return {
     id: record.id,
     studentId: record.student_id,
@@ -395,6 +569,23 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString(), storage: hasSupabase ? "supabase" : "local-json" });
 });
 
+async function authRequired(req, res, next) {
+  try {
+    const token = getToken(req);
+    if (!token) return res.status(401).json({ message: "未登录或登录已失效" });
+    const session = await findSessionByToken(token);
+    if (!session) return res.status(401).json({ message: "登录状态无效，请重新登录" });
+    const users = await listUsers();
+    const user = users.find((item) => item.id === (session.user_id || session.userId));
+    if (!user) return res.status(401).json({ message: "用户不存在" });
+    req.currentUser = safeUser(user);
+    req.token = token;
+    next();
+  } catch (error) {
+    res.status(500).json({ message: error.message || "鉴权失败" });
+  }
+}
+
 app.post("/api/login", async (req, res) => {
   try {
     const { username, password } = req.body || {};
@@ -424,36 +615,20 @@ app.post("/api/logout", authRequired, async (req, res) => {
   }
 });
 
-async function authRequired(req, res, next) {
-  try {
-    const token = getToken(req);
-    if (!token) return res.status(401).json({ message: "未登录或登录已失效" });
-    const session = await findSessionByToken(token);
-    if (!session) return res.status(401).json({ message: "登录状态无效，请重新登录" });
-    const users = await listUsers();
-    const user = users.find((item) => item.id === session.user_id);
-    if (!user) return res.status(401).json({ message: "用户不存在" });
-    req.currentUser = safeUser(user);
-    req.token = token;
-    next();
-  } catch (error) {
-    res.status(500).json({ message: error.message || "鉴权失败" });
-  }
-}
-
 app.get("/api/public/students", async (req, res) => {
   try {
     const students = await listStudents();
     const records = await listRecords();
     const result = students.map((student) => {
-      const studentRecords = records.filter((item) => item.student_id === student.id);
-      const latest = studentRecords.slice().sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0] || null;
-      const averageScore = studentRecords.length ? Number((studentRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / studentRecords.length).toFixed(1)) : 0;
-      const globalAverage = records.length ? Number((records.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / records.length).toFixed(1)) : 0;
+      const studentRecords = records.filter((item) => (item.student_id || item.studentId) === student.id);
+      const latest = studentRecords.slice().sort((a, b) => new Date(b.updated_at || b.updatedAt) - new Date(a.updated_at || a.updatedAt))[0] || null;
+      const averageScore = studentRecords.length ? Number((studentRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / studentRecords.length).toFixed(1)) : 0;
+      const globalAverage = records.length ? Number((records.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / records.length).toFixed(1)) : 0;
+      const latestClient = mapRecordToClient(latest, globalAverage);
       return {
         ...buildStudentView(student, "public"),
         recordCount: studentRecords.length,
-        latestRecord: latest ? { period: latest.period, totalScore: latest.total_score, level: latest.level, warningTags: buildWarningInfo(latest, globalAverage) } : null,
+        latestRecord: latestClient,
         averageScore
       };
     }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "zh-Hans-CN"));
@@ -471,12 +646,21 @@ app.get("/api/public/students/:id", async (req, res) => {
     const allRecords = await listRecords();
     const allStudents = await listStudents();
     const schoolRecords = allRecords.filter((item) => {
-      const s = allStudents.find((studentItem) => studentItem.id === item.student_id);
+      const s = allStudents.find((studentItem) => studentItem.id === (item.student_id || item.studentId));
       return s && s.school === student.school;
     });
-    const schoolAverage = schoolRecords.length ? Number((schoolRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / schoolRecords.length).toFixed(1)) : 0;
+    const schoolAverage = schoolRecords.length ? Number((schoolRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / schoolRecords.length).toFixed(1)) : 0;
     const mappedRecords = records.map((record) => mapRecordToClient(record, schoolAverage));
-    const chart = mappedRecords.map((record) => ({ period: record.period, totalScore: record.totalScore, level: record.level, warningTags: record.warningTags, aesthetic: record.scores.aesthetic, finance: record.scores.finance, psychology: record.scores.psychology, behavior: record.scores.behavior }));
+    const chart = mappedRecords.map((record) => ({
+      period: record.period,
+      totalScore: record.totalScore,
+      level: record.level,
+      warningTags: record.warningTags,
+      aesthetic: record.scores.aesthetic,
+      finance: record.scores.finance,
+      psychology: record.scores.psychology,
+      behavior: record.scores.behavior
+    }));
     res.json({ student: buildStudentView(student, "public"), records: chart, chart, comparison: { schoolAverage } });
   } catch (error) {
     res.status(500).json({ message: error.message || "获取公开详情失败" });
@@ -487,15 +671,15 @@ app.get("/api/students", authRequired, async (req, res) => {
   try {
     const students = await listStudents();
     const records = await listRecords();
-    const globalAverage = records.length ? Number((records.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / records.length).toFixed(1)) : 0;
+    const globalAverage = records.length ? Number((records.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / records.length).toFixed(1)) : 0;
     const result = students.map((student) => {
-      const studentRecords = records.filter((item) => item.student_id === student.id);
-      const latest = studentRecords.slice().sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0] || null;
-      const averageScore = studentRecords.length ? Number((studentRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / studentRecords.length).toFixed(1)) : 0;
+      const studentRecords = records.filter((item) => (item.student_id || item.studentId) === student.id);
+      const latest = studentRecords.slice().sort((a, b) => new Date(b.updated_at || b.updatedAt) - new Date(a.updated_at || a.updatedAt))[0] || null;
+      const averageScore = studentRecords.length ? Number((studentRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / studentRecords.length).toFixed(1)) : 0;
       return {
         ...buildStudentView(student, req.currentUser.role),
         recordCount: studentRecords.length,
-        latestRecord: latest ? { ...mapRecordToClient(latest, globalAverage) } : null,
+        latestRecord: latest ? mapRecordToClient(latest, globalAverage) : null,
         averageScore,
         globalAverage
       };
@@ -514,17 +698,26 @@ app.get("/api/students/:id", authRequired, async (req, res) => {
     const allRecords = await listRecords();
     const allStudents = await listStudents();
     const schoolRecords = allRecords.filter((item) => {
-      const s = allStudents.find((studentItem) => studentItem.id === item.student_id);
+      const s = allStudents.find((studentItem) => studentItem.id === (item.student_id || item.studentId));
       return s && s.school === student.school;
     });
     const classRecords = allRecords.filter((item) => {
-      const s = allStudents.find((studentItem) => studentItem.id === item.student_id);
-      return s && s.school === student.school && s.grade_class === student.grade_class;
+      const s = allStudents.find((studentItem) => studentItem.id === (item.student_id || item.studentId));
+      return s && s.school === student.school && (s.grade_class || s.gradeClass) === (student.grade_class || student.gradeClass);
     });
-    const schoolAverage = schoolRecords.length ? Number((schoolRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / schoolRecords.length).toFixed(1)) : 0;
-    const classAverage = classRecords.length ? Number((classRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / classRecords.length).toFixed(1)) : 0;
+    const schoolAverage = schoolRecords.length ? Number((schoolRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / schoolRecords.length).toFixed(1)) : 0;
+    const classAverage = classRecords.length ? Number((classRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / classRecords.length).toFixed(1)) : 0;
     const mappedRecords = records.map((record) => mapRecordToClient(record, schoolAverage));
-    const chart = mappedRecords.map((record) => ({ period: record.period, totalScore: record.totalScore, level: record.level, warningTags: record.warningTags, aesthetic: record.scores.aesthetic, finance: record.scores.finance, psychology: record.scores.psychology, behavior: record.scores.behavior }));
+    const chart = mappedRecords.map((record) => ({
+      period: record.period,
+      totalScore: record.totalScore,
+      level: record.level,
+      warningTags: record.warningTags,
+      aesthetic: record.scores.aesthetic,
+      finance: record.scores.finance,
+      psychology: record.scores.psychology,
+      behavior: record.scores.behavior
+    }));
     res.json({ student: buildStudentView(student, req.currentUser.role), records: mappedRecords, chart, comparison: { schoolAverage, classAverage } });
   } catch (error) {
     res.status(500).json({ message: error.message || "获取学生详情失败" });
@@ -567,10 +760,16 @@ app.put("/api/students/:id", authRequired, async (req, res) => {
     const student = await findStudentById(req.params.id);
     if (!student) return res.status(404).json({ message: "学生不存在" });
     const updated = await updateStudent(req.params.id, {
-      ...req.body,
-      grade_class: req.body.gradeClass ?? student.grade_class,
-      public_note: req.body.publicNote || req.body.note || student.public_note || "",
+      name: req.body.name ?? student.name,
+      gender: req.body.gender ?? student.gender,
       age: Number(req.body.age || student.age || 0),
+      school: req.body.school ?? student.school,
+      grade_class: req.body.gradeClass ?? student.grade_class,
+      guardian: req.body.guardian ?? student.guardian,
+      phone: req.body.phone ?? student.phone,
+      address: req.body.address ?? student.address,
+      note: req.body.note ?? student.note,
+      public_note: req.body.publicNote || req.body.note || student.public_note || "",
       updated_at: new Date().toISOString(),
       updated_by: req.currentUser.id
     });
@@ -606,23 +805,23 @@ app.get("/api/export/students.csv", authRequired, async (req, res) => {
     const students = await listStudents();
     const records = await listRecords();
     const rows = students.map((student) => {
-      const studentRecords = records.filter((item) => item.student_id === student.id);
-      const latestRecord = studentRecords.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0] || null;
+      const studentRecords = records.filter((item) => (item.student_id || item.studentId) === student.id);
+      const latestRecord = studentRecords.sort((a, b) => new Date(b.updated_at || b.updatedAt) - new Date(a.updated_at || a.updatedAt))[0] || null;
       return {
         name: student.name || "",
         gender: student.gender || "",
         age: student.age || "",
         school: student.school || "",
-        gradeClass: student.grade_class || "",
+        gradeClass: student.grade_class || student.gradeClass || "",
         guardian: student.guardian || "",
         phone: student.phone || "",
         address: student.address || "",
         latestPeriod: latestRecord?.period || "",
-        latestScore: latestRecord?.total_score || "",
+        latestScore: latestRecord?.total_score ?? latestRecord?.totalScore ?? "",
         latestLevel: latestRecord?.level || "",
         latestWarnings: (latestRecord ? buildWarningInfo(latestRecord, 0) : []).join("；"),
         recordCount: studentRecords.length,
-        publicNote: student.public_note || "",
+        publicNote: student.public_note || student.publicNote || "",
         note: student.note || ""
       };
     });
@@ -655,21 +854,21 @@ app.get("/api/export/records.csv", authRequired, async (req, res) => {
     const records = await listRecords();
     const students = await listStudents();
     const rows = records.map((record) => {
-      const student = students.find((item) => item.id === record.student_id);
+      const student = students.find((item) => item.id === (record.student_id || record.studentId));
       return {
         studentName: student?.name || "",
         school: student?.school || "",
-        gradeClass: student?.grade_class || "",
+        gradeClass: student?.grade_class || student?.gradeClass || "",
         period: record.period || "",
-        aesthetic: record.aesthetic || "",
-        finance: record.finance || "",
-        psychology: record.psychology || "",
-        behavior: record.behavior || "",
-        totalScore: record.total_score || "",
+        aesthetic: record.aesthetic ?? record.scores?.aesthetic ?? "",
+        finance: record.finance ?? record.scores?.finance ?? "",
+        psychology: record.psychology ?? record.scores?.psychology ?? "",
+        behavior: record.behavior ?? record.scores?.behavior ?? "",
+        totalScore: record.total_score ?? record.totalScore ?? "",
         level: record.level || "",
         warnings: buildWarningInfo(record, 0).join("；"),
-        overall: record.comment_overall || "",
-        updatedAt: record.updated_at || ""
+        overall: record.comment_overall || record.comments?.overall || "",
+        updatedAt: record.updated_at || record.updatedAt || ""
       };
     });
     const csv = toCsv([
@@ -701,15 +900,15 @@ app.get("/api/export/students/:id.csv", authRequired, async (req, res) => {
     const records = await listRecordsByStudentId(student.id);
     const rows = records.map((record) => ({
       period: record.period || "",
-      aesthetic: record.aesthetic || "",
-      finance: record.finance || "",
-      psychology: record.psychology || "",
-      behavior: record.behavior || "",
-      totalScore: record.total_score || "",
+      aesthetic: record.aesthetic ?? record.scores?.aesthetic ?? "",
+      finance: record.finance ?? record.scores?.finance ?? "",
+      psychology: record.psychology ?? record.scores?.psychology ?? "",
+      behavior: record.behavior ?? record.scores?.behavior ?? "",
+      totalScore: record.total_score ?? record.totalScore ?? "",
       level: record.level || "",
       warnings: buildWarningInfo(record, 0).join("；"),
-      overall: record.comment_overall || "",
-      updatedAt: record.updated_at || ""
+      overall: record.comment_overall || record.comments?.overall || "",
+      updatedAt: record.updated_at || record.updatedAt || ""
     }));
     const csv = toCsv([
       { key: "period", label: "记录周期" },
@@ -738,19 +937,19 @@ app.post("/api/export/students/:id/pdf", authRequired, async (req, res) => {
     const allRecords = await listRecords();
     const allStudents = await listStudents();
     const schoolRecords = allRecords.filter((item) => {
-      const s = allStudents.find((studentItem) => studentItem.id === item.student_id);
+      const s = allStudents.find((studentItem) => studentItem.id === (item.student_id || item.studentId));
       return s && s.school === student.school;
     });
     const classRecords = allRecords.filter((item) => {
-      const s = allStudents.find((studentItem) => studentItem.id === item.student_id);
-      return s && s.school === student.school && s.grade_class === student.grade_class;
+      const s = allStudents.find((studentItem) => studentItem.id === (item.student_id || item.studentId));
+      return s && s.school === student.school && (s.grade_class || s.gradeClass) === (student.grade_class || student.gradeClass);
     });
     const payload = {
       student: buildStudentView(student, "admin"),
       records: records.map((record) => mapRecordToClient(record, 0)),
       comparison: {
-        schoolAverage: schoolRecords.length ? Number((schoolRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / schoolRecords.length).toFixed(1)) : 0,
-        classAverage: classRecords.length ? Number((classRecords.reduce((sum, item) => sum + Number(item.total_score || 0), 0) / classRecords.length).toFixed(1)) : 0
+        schoolAverage: schoolRecords.length ? Number((schoolRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / schoolRecords.length).toFixed(1)) : 0,
+        classAverage: classRecords.length ? Number((classRecords.reduce((sum, item) => sum + Number(item.total_score ?? item.totalScore ?? 0), 0) / classRecords.length).toFixed(1)) : 0
       }
     };
     const tempDir = path.join(os.tmpdir(), "nla-student-pdf");
@@ -776,9 +975,10 @@ app.post("/api/records", authRequired, async (req, res) => {
     const student = await findStudentById(req.body.studentId);
     if (!student) return res.status(400).json({ message: "请选择有效的学生档案" });
     if (!req.body.period) return res.status(400).json({ message: "请填写记录周期" });
+    const payload = computeRecordPayload(req.body, {});
     const record = await insertRecord({
       id: generateId("rec"),
-      ...computeRecordPayload(req.body),
+      ...payload,
       created_at: new Date().toISOString(),
       created_by: req.currentUser.id,
       updated_by: req.currentUser.id
@@ -794,7 +994,11 @@ app.put("/api/records/:id", authRequired, async (req, res) => {
   try {
     const before = await findRecordById(req.params.id);
     if (!before) return res.status(404).json({ message: "成长记录不存在" });
-    const record = await updateRecord(req.params.id, { ...computeRecordPayload(req.body, before), updated_by: req.currentUser.id });
+    const payload = computeRecordPayload(req.body, before);
+    const record = await updateRecord(req.params.id, {
+      ...payload,
+      updated_by: req.currentUser.id
+    });
     await insertAuditLog({ actorId: req.currentUser.id, actorName: req.currentUser.name, actorRole: req.currentUser.role, action: "update", targetType: "record", targetId: before.id, detail: `修改成长记录：${before.period}` });
     res.json({ record: mapRecordToClient(record) });
   } catch (error) {
@@ -827,11 +1031,18 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-ensureSupabaseSeed().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT} (${hasSupabase ? "supabase" : "local-json"})`);
-  });
-}).catch((error) => {
-  console.error("Supabase 初始化失败：", error);
-  process.exit(1);
-});
+const startServer = async () => {
+  try {
+    if (hasSupabase) {
+      await ensureSupabaseSeed();
+    }
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT} (${hasSupabase ? "supabase" : "local-json"})`);
+    });
+  } catch (error) {
+    console.error("服务启动失败：", error);
+    process.exit(1);
+  }
+};
+
+startServer();

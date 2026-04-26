@@ -156,6 +156,8 @@ ADMIN_ACCOUNTS=[{"username":"admin1","password":"pass1","name":"管理员A"},{"u
    - `SUPABASE_SERVICE_ROLE_KEY`
 4. 首次启动服务时，系统会自动把环境变量中的管理员账号写入 `growth_admin_users`（如不存在）。
 5. 配完后，网站数据将优先写入 Supabase，不再依赖本地 `db.json`。
+6. 如果你暂时没有配 Supabase 环境变量，项目仍可继续以本地 JSON 方式运行，便于本地调试。
+
 
 ## 后续可扩展
 

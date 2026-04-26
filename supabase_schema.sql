@@ -33,6 +33,12 @@ create table if not exists growth_students (
   updated_by text
 );
 
+alter table if exists growth_students add column if not exists grade_class text;
+alter table if exists growth_students add column if not exists public_note text;
+alter table if exists growth_students add column if not exists created_by text;
+alter table if exists growth_students add column if not exists updated_by text;
+
+
 create table if not exists growth_records (
   id text primary key,
   student_id text not null references growth_students(id) on delete cascade,
