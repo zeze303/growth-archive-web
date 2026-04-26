@@ -66,6 +66,13 @@ create table if not exists growth_audit_logs (
   detail text
 );
 
+alter table if exists growth_audit_logs add column if not exists actor_id text;
+alter table if exists growth_audit_logs add column if not exists actor_name text;
+alter table if exists growth_audit_logs add column if not exists actor_role text;
+alter table if exists growth_audit_logs add column if not exists target_type text;
+alter table if exists growth_audit_logs add column if not exists target_id text;
+
+
 create index if not exists idx_growth_records_student_id on growth_records(student_id);
 create index if not exists idx_growth_records_period on growth_records(period);
 create index if not exists idx_growth_students_school on growth_students(school);

@@ -243,17 +243,35 @@ async function findSessionByToken(token) {
 
 async function insertAuditLog(payload) {
   if (!hasSupabase) return;
-  const log = { id: generateId("log"), time: new Date().toISOString(), ...payload };
+  const log = {
+    id: generateId("log"),
+    time: new Date().toISOString(),
+    actor_id: payload.actorId || null,
+    actor_name: payload.actorName || null,
+    actor_role: payload.actorRole || null,
+    action: payload.action || null,
+    target_type: payload.targetType || null,
+    target_id: payload.targetId || null,
+    detail: payload.detail || null
+  };
   const { error } = await supabase.from(TABLES.logs).insert(log);
   if (error) throw error;
 }
+
 
 async function listAuditLogs() {
   if (!hasSupabase) return [];
   const { data, error } = await supabase.from(TABLES.logs).select("*").order("time", { ascending: false }).limit(3000);
   if (error) throw error;
-  return data || [];
+  return (data || []).map((item) => ({
+    ...item,
+    actorName: item.actor_name,
+    actorRole: item.actor_role,
+    targetType: item.target_type,
+    targetId: item.target_id
+  }));
 }
+
 
 async function listStudents() {
   if (!hasSupabase) return [];
