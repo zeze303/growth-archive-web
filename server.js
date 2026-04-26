@@ -126,7 +126,14 @@ function computeRecordPayload(body, existing = {}) {
   };
 }
 
+function getToken(req) {
+  const auth = req.headers.authorization || "";
+  if (!auth.startsWith("Bearer ")) return null;
+  return auth.slice(7);
+}
+
 function buildStudentView(student, role = "public") {
+
   const isAdmin = role === "admin";
   return {
     id: student.id,
