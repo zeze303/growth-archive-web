@@ -97,7 +97,43 @@ function warningTags(tags = []) {
   return tags.map((tag) => `<span class="badge danger">${tag}</span>`).join("");
 }
 
+function safeMetricValue(record, key) {
+  if (!record) return 0;
+  if (record[key] !== undefined && record[key] !== null) return record[key];
+  if (record.scores && record.scores[key] !== undefined && record.scores[key] !== null) return record.scores[key];
+  return 0;
+}
+
+function normalizeRecord(record = {}) {
+  return {
+    ...record,
+    scores: record.scores || {
+      aesthetic: safeMetricValue(record, "aesthetic"),
+      finance: safeMetricValue(record, "finance"),
+      psychology: safeMetricValue(record, "psychology"),
+      behavior: safeMetricValue(record, "behavior")
+    },
+    aesthetic: safeMetricValue(record, "aesthetic"),
+    finance: safeMetricValue(record, "finance"),
+    psychology: safeMetricValue(record, "psychology"),
+    behavior: safeMetricValue(record, "behavior"),
+    warningTags: record.warningTags || []
+  };
+}
+
+function normalizeStudentDetailPayload(detail) {
+  if (!detail) return null;
+  const records = (detail.records || []).map(normalizeRecord);
+  const chart = (detail.chart || detail.records || []).map(normalizeRecord);
+  return {
+    ...detail,
+    records,
+    chart
+  };
+}
+
 function setPublicMode() {
+
   state.mode = "public";
   state.view = "public-home";
   state.studentDetails = null;
@@ -159,11 +195,12 @@ async function loadPublicBootstrap() {
 
 async function loadPublicStudentDetails(studentId) {
   const result = await api(`/api/public/students/${studentId}`);
-  state.studentDetails = result;
+  state.studentDetails = normalizeStudentDetailPayload(result);
   render();
   renderChart();
   document.getElementById("publicStudentDetailAnchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
 
 
 async function loadAdminBootstrap() {
@@ -177,11 +214,12 @@ async function loadAdminBootstrap() {
 
 async function loadAdminStudentDetails(studentId) {
   const result = await api(`/api/students/${studentId}`);
-  state.studentDetails = result;
+  state.studentDetails = normalizeStudentDetailPayload(result);
   state.view = "students";
   render();
   renderChart();
 }
+
 
 function logout() {
   api("/api/logout", { method: "POST" }).catch(() => null);
@@ -357,7 +395,8 @@ function renderPublicStudentDetail() {
                 <div><strong>${record.period}</strong><div class="note">总分 ${record.totalScore} / 等级 ${record.level}</div></div>
                 <div class="actions-inline">${warningTags(record.warningTags || [])}</div>
               </header>
-              <div class="score-pills"><span>美育 ${record.aesthetic}</span><span>财商 ${record.finance}</span><span>心理 ${record.psychology}</span><span>行为 ${record.behavior}</span></div>
+              <div class="score-pills"><span>美育 ${safeMetricValue(record, "aesthetic")}</span><span>财商 ${safeMetricValue(record, "finance")}</span><span>心理 ${safeMetricValue(record, "psychology")}</span><span>行为 ${safeMetricValue(record, "behavior")}</span></div>
+
             </article>
           `).join("") : `<div class="empty">暂无成长记录</div>`}
         </div>
@@ -1000,12 +1039,13 @@ function renderChart() {
         labels: ["美育", "财商", "心理", "行为"],
         datasets: [{
           label: "最新四维表现",
-          data: [latest.aesthetic || latest.scores?.aesthetic || 0, latest.finance || latest.scores?.finance || 0, latest.psychology || latest.scores?.psychology || 0, latest.behavior || latest.scores?.behavior || 0],
+          data: [safeMetricValue(latest, "aesthetic"), safeMetricValue(latest, "finance"), safeMetricValue(latest, "psychology"), safeMetricValue(latest, "behavior")],
           borderColor: "#1f9d63",
           backgroundColor: "rgba(31,157,99,0.14)",
           pointBackgroundColor: "#1f9d63"
         }]
       },
+
       options: {
         responsive: true,
         maintainAspectRatio: false,

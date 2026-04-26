@@ -267,14 +267,21 @@ function buildStudentView(student, role = "public") {
 function buildWarningInfo(record, averageScore = 0) {
   const warnings = [];
   if (!record) return warnings;
+  const scoreLabelMap = {
+    aesthetic: "美育",
+    finance: "财商",
+    psychology: "心理",
+    behavior: "行为"
+  };
   const scores = record.scores || {};
   Object.entries(scores).forEach(([key, value]) => {
-    if (Number(value) <= 2) warnings.push(`${key}维度偏低`);
+    if (Number(value) <= 2) warnings.push(`${scoreLabelMap[key] || key}维度偏低`);
   });
   if (Number(record.totalScore || 0) <= 8) warnings.push("总分偏低");
   if (averageScore && Number(record.totalScore || 0) < averageScore - 2) warnings.push("低于群体平均水平");
   return warnings;
 }
+
 
 function csvEscape(value) {
   const text = String(value ?? "");
