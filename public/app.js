@@ -556,7 +556,8 @@ function renderStudentsView(activeStudents) {
   return `
     <section class="card archive-panel">
       <div class="toolbar"><div><h3 class="section-title">学生档案列表</h3><div class="note">管理端显示完整字段，支持查看详情与编辑。</div></div><div class="actions-inline actions-search"><input class="search-input field-input" id="studentSearch" placeholder="搜索姓名、学校、班级" value="${state.studentSearch}" /><button class="btn secondary" id="gotoStudentForm">新增学生</button><button class="btn" id="gotoRecordForm">新增记录</button></div></div>
-      <div class="table-wrap"><table><thead><tr><th>学生</th><th>监护/联系方式</th><th>记录情况</th><th>群体对比</th><th>操作</th></tr></thead><tbody>${activeStudents.length ? activeStudents.map((student) => `<tr><td><strong>${student.name}</strong><br /><span class="note">${student.school || "-"} / ${student.gradeClass || ""}</span></td><td>${student.guardian || "-"}<br /><span class="note">${student.phone || "未填写"}</span></td><td>${student.recordCount} 条<br /><span class="note">最新：${student.latestRecord?.period || "暂无"}</span></td><td>个人均分 ${student.averageScore || 0}<br /><span class="note">群体均值 ${student.globalAverage || 0}</span></td><td><div class="actions-inline"><button class="btn secondary detail-btn" data-id="${student.id}">查看详情</button><button class="btn ghost edit-student-btn" data-id="${student.id}">编辑档案</button></div></td></tr>`).join("") : `<tr><td colspan="5"><div class="empty">暂无匹配的学生档案</div></td></tr>`}</tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>学生</th><th>监护/联系方式</th><th>记录情况</th><th>群体对比</th><th>操作</th></tr></thead><tbody>${activeStudents.length ? activeStudents.map((student) => `<tr><td><strong>${student.name}</strong><br /><span class="note">${student.school || "-"} / ${student.gradeClass || ""}</span></td><td>${student.guardian || "-"}<br /><span class="note">${student.phone || "未填写"}</span></td><td>${student.recordCount} 条<br /><span class="note">最新：${student.latestRecord?.period || "暂无"}</span></td><td>个人均分 ${student.averageScore || 0}<br /><span class="note">群体均值 ${student.globalAverage || 0}</span></td><td><div class="actions-inline"><button class="btn secondary detail-btn" data-id="${student.id}">查看详情</button><button class="btn ghost edit-student-btn" data-id="${student.id}">编辑档案</button><button class="btn danger delete-student-btn" data-id="${student.id}" data-name="${student.name}">删除档案</button></div></td></tr>`).join("") : `<tr><td colspan="5"><div class="empty">暂无匹配的学生档案</div></td></tr>`}</tbody></table></div>
+
     </section>
     ${state.studentDetails ? renderAdminStudentDetail() : ""}
   `;
@@ -662,7 +663,27 @@ function bindStudentEvents() {
     });
   });
 
+  document.querySelectorAll(".delete-student-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const ok = window.confirm(`确定删除学生档案“${button.dataset.name}”吗？该学生的所有成长记录也会一并删除，且无法恢复。`);
+      if (!ok) return;
+      try {
+        const result = await api(`/api/students/${button.dataset.id}`, { method: "DELETE" });
+        setMessage("success", `学生档案已删除，并联动删除 ${result.removedRecordCount || 0} 条成长记录`);
+        state.studentDetails = null;
+        await loadAdminBootstrap();
+        await syncAuditLogs();
+        state.view = "students";
+        renderAdminApp();
+      } catch (error) {
+        setMessage("error", error.message);
+        renderAdminApp();
+      }
+    });
+  });
+
   const createRecordForStudent = document.getElementById("createRecordForStudent");
+
   if (createRecordForStudent) {
     createRecordForStudent.addEventListener("click", () => {
       state.editingRecord = {

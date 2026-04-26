@@ -4,11 +4,11 @@
   "description": "心迹成诗成长档案采集后台",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "python -m pip install reportlab pypdf"
   },
   "dependencies": {
     "express": "^4.19.2",
     "pdf-lib": "^1.17.1"
   }
 }
-

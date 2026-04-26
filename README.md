@@ -28,7 +28,9 @@
 - 前端：HTML + CSS + JavaScript
 - 后端：Node.js + Express
 - 数据存储：本地 JSON 文件（`data/db.json`）
+- PDF：服务端使用 Python + ReportLab 生成中文 PDF 报告
 - 部署：可直接部署到 Render
+
 
 ## 本地运行
 
@@ -113,6 +115,9 @@ ADMIN_ACCOUNTS=[{"username":"admin1","password":"pass1","name":"管理员A"},{"u
 - Root Directory: `web`
 - Build Command: `npm install`
 - Start Command: `npm start`
+
+说明：部署时 `npm install` 后会自动执行 `postinstall`，补装 `reportlab` 和 `pypdf`，用于单个学生 PDF 报告导出。
+
 
 建议在 Render 后台设置环境变量：
 

@@ -458,7 +458,31 @@ app.put("/api/students/:id", authRequired, (req, res) => {
   res.json({ student: buildStudentView(db.students[index], req.currentUser.role) });
 });
 
+app.delete("/api/students/:id", authRequired, (req, res) => {
+  const db = readDb();
+  const index = db.students.findIndex((item) => item.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ message: "学生不存在" });
+  }
+  const student = db.students[index];
+  const removedRecords = db.records.filter((item) => item.studentId === student.id);
+  db.students.splice(index, 1);
+  db.records = db.records.filter((item) => item.studentId !== student.id);
+  addAuditLog(db, {
+    actorId: req.currentUser.id,
+    actorName: req.currentUser.name,
+    actorRole: req.currentUser.role,
+    action: "delete",
+    targetType: "student",
+    targetId: student.id,
+    detail: `删除学生档案：${student.name}，并联动删除 ${removedRecords.length} 条成长记录`
+  });
+  writeDb(db);
+  res.json({ success: true, removedRecordCount: removedRecords.length });
+});
+
 app.get("/api/audit-logs", authRequired, (req, res) => {
+
   const db = readDb();
   res.json({ logs: db.auditLogs || [] });
 });
