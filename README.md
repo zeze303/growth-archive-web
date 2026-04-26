@@ -26,10 +26,12 @@
 ## 技术方案
 
 - 前端：HTML + CSS + JavaScript
+- 前端：HTML + CSS + JavaScript
 - 后端：Node.js + Express
-- 数据存储：本地 JSON 文件（`data/db.json`）
+- 数据存储：Supabase（推荐）/ 本地 JSON（兜底）
 - PDF：服务端使用 Python + ReportLab 生成中文 PDF 报告
 - 部署：可直接部署到 Render
+
 
 
 ## 本地运行
@@ -100,6 +102,9 @@ ADMIN_ACCOUNTS=[{"username":"admin1","password":"pass1","name":"管理员A"},{"u
 - 学生档案
 - 成长记录
 
+当配置了 Supabase 后，网站会优先使用 Supabase 中的 `growth_*` 数据表；只有未配置 `SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY` 时，才会回退到本地 JSON 兜底模式。
+
+
 
 ## Render 部署建议
 
@@ -121,11 +126,12 @@ ADMIN_ACCOUNTS=[{"username":"admin1","password":"pass1","name":"管理员A"},{"u
 
 建议在 Render 后台设置环境变量：
 
-- `ADMIN_USERNAME`
-- `ADMIN_PASSWORD`
-
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `ADMIN_ACCOUNTS`（推荐）或 `ADMIN_USERNAME` / `ADMIN_PASSWORD`
 
 上线前建议把默认账号密码改成你们团队自己的，并避免继续使用示例口令。
+
 
 
 ## 上线前建议检查
@@ -140,7 +146,19 @@ ADMIN_ACCOUNTS=[{"username":"admin1","password":"pass1","name":"管理员A"},{"u
 - 如果要给评委演示，建议先准备好 2-3 个完整学生样例数据
 
 
+## Supabase 初始化步骤
+
+1. 打开 Supabase SQL Editor。
+2. 执行仓库中的：
+   - `web/supabase_schema.sql`
+3. 在 Render 或本地环境变量中配置：
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. 首次启动服务时，系统会自动把环境变量中的管理员账号写入 `growth_admin_users`（如不存在）。
+5. 配完后，网站数据将优先写入 Supabase，不再依赖本地 `db.json`。
+
 ## 后续可扩展
+
 
 
 - 增加按学期筛选

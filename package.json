@@ -8,7 +8,9 @@
     "postinstall": "python -m pip install reportlab pypdf"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
     "express": "^4.19.2",
     "pdf-lib": "^1.17.1"
   }
 }
+
